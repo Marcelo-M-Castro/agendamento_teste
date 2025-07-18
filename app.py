@@ -83,16 +83,24 @@ if menu == "📅 Agendar":
     if st.button("✅ Confirmar Agendamento"):
         if nome and telefone and hora:
             df = carregar_dados()
-            novo = pd.DataFrame([{
-                "Nome": nome.strip(),
-                "Telefone": telefone.strip(),
-                "Barbeiro": barbeiro,
-                "Data": data.strftime("%Y-%m-%d"),
-                "Hora": hora
-            }])
-            df = pd.concat([df, novo], ignore_index=True)
-            salvar_dados(df)
-            st.success("🎉 Agendamento realizado com sucesso!")
+            conflito = df[
+                (df["Barbeiro"] == barbeiro) &
+                (df["Data"] == data.strftime("%Y-%m-%d")) &
+                (df["Hora"] == hora)
+            ]
+            if not conflito.empty:
+                st.error("❌ Horário já reservado para esse barbeiro. Escolha outro horário.")
+            else:
+                novo = pd.DataFrame([{
+                    "Nome": nome.strip(),
+                    "Telefone": telefone.strip(),
+                    "Barbeiro": barbeiro,
+                    "Data": data.strftime("%Y-%m-%d"),
+                    "Hora": hora
+                }])
+                df = pd.concat([df, novo], ignore_index=True)
+                salvar_dados(df)
+                st.success("🎉 Agendamento realizado com sucesso!")
         else:
             st.error("Preencha todos os campos para confirmar o agendamento.")
 
