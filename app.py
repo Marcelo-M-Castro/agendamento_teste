@@ -1,10 +1,18 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+from pathlib import Path
 
-# Configurações da barbearia
-barbeiros = ["Barbeiro1", "Barbeiro2", "Barbeiro3"]
-dias_funcionamento = {
+# ------------------------------
+# CONFIGURAÇÕES
+# ------------------------------
+st.set_page_config(page_title="Agendamento - Barbearia", layout="centered")
+st.title("💈 Sistema de Agendamento - Barbearia")
+
+ARQUIVO_CSV = "agendamentos.csv"
+BARBEIROS = ["Barbeiro1", "Barbeiro2", "Barbeiro3"]
+
+HORARIOS_FUNCIONAMENTO = {
     "segunda-feira": ("09:00", "20:00"),
     "terça-feira": ("09:00", "20:00"),
     "quarta-feira": ("09:00", "20:00"),
@@ -12,75 +20,102 @@ dias_funcionamento = {
     "sexta-feira": ("09:00", "20:00"),
     "sábado": ("09:00", "16:00")
 }
-arquivo_csv = "agendamentos.csv"
 
-# Inicializa o arquivo se não existir
+DIAS_TRADUCAO = {
+    "Monday": "segunda-feira",
+    "Tuesday": "terça-feira",
+    "Wednesday": "quarta-feira",
+    "Thursday": "quinta-feira",
+    "Friday": "sexta-feira",
+    "Saturday": "sábado",
+    "Sunday": "domingo"
+}
 
-try:
-    df = pd.read_csv(arquivo_csv)
-except (FileNotFoundError, pd.errors.EmptyDataError):
-    df = pd.DataFrame(columns=["Nome", "Telefone", "Barbeiro", "Data", "Hora"])
-    df.to_csv(arquivo_csv, index=False)
+# ------------------------------
+# FUNÇÕES AUXILIARES
+# ------------------------------
+def carregar_dados():
+    if not Path(ARQUIVO_CSV).exists():
+        df = pd.DataFrame(columns=["Nome", "Telefone", "Barbeiro", "Data", "Hora"])
+        df.to_csv(ARQUIVO_CSV, index=False)
+    try:
+        return pd.read_csv(ARQUIVO_CSV)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame(columns=["Nome", "Telefone", "Barbeiro", "Data", "Hora"])
 
-# Função para gerar horários disponíveis
-def gerar_horarios(data_selecionada):
-    dia_semana = data_selecionada.strftime("%A").lower()
-    if dia_semana not in dias_funcionamento:
+def salvar_dados(df):
+    df.to_csv(ARQUIVO_CSV, index=False)
+
+def gerar_horarios(data):
+    dia_semana = DIAS_TRADUCAO.get(data.strftime("%A"))
+    if dia_semana not in HORARIOS_FUNCIONAMENTO:
         return []
 
-    inicio, fim = dias_funcionamento[dia_semana]
-    inicio_dt = datetime.strptime(inicio, "%H:%M")
-    fim_dt = datetime.strptime(fim, "%H:%M")
+    inicio_str, fim_str = HORARIOS_FUNCIONAMENTO[dia_semana]
+    inicio = datetime.strptime(inicio_str, "%H:%M")
+    fim = datetime.strptime(fim_str, "%H:%M")
+
     horarios = []
-    atual = inicio_dt
-    while atual < fim_dt:
+    atual = inicio
+    while atual < fim:
         horarios.append(atual.strftime("%H:%M"))
         atual += timedelta(minutes=30)
     return horarios
 
-# Interface do app
-st.set_page_config(page_title="Agendamento - barbearia_teste")
-st.title("💈 Plataforma de Agendamento - barbearia_teste")
+# ------------------------------
+# INTERFACE
+# ------------------------------
+menu = st.sidebar.radio("Menu", ["📅 Agendar", "🔐 Admin"])
 
-menu = st.sidebar.selectbox("Menu", ["Agendar horário", "Admin (ver agendamentos)"])
-
-if menu == "Agendar horário":
-    st.subheader("📅 Faça seu agendamento")
-
+if menu == "📅 Agendar":
+    st.header("📋 Agende seu Horário")
     nome = st.text_input("Nome completo")
     telefone = st.text_input("Telefone (WhatsApp)")
-    barbeiro = st.selectbox("Escolha o barbeiro", barbeiros)
-    data = st.date_input("Escolha o dia", min_value=datetime.today())
-    
+    barbeiro = st.selectbox("Barbeiro desejado", BARBEIROS)
+    data = st.date_input("Escolha a data", min_value=datetime.today())
+
     horarios_disponiveis = gerar_horarios(data)
-    if horarios_disponiveis:
-        hora = st.selectbox("Escolha o horário", horarios_disponiveis)
-    else:
-        st.warning("Barbearia fechada neste dia.")
-        hora = None
+    hora = st.selectbox("Horário disponível", horarios_disponiveis) if horarios_disponiveis else None
 
-    if st.button("Confirmar Agendamento") and nome and telefone and hora:
-        novo_agendamento = {
-            "Nome": nome,
-            "Telefone": telefone,
-            "Barbeiro": barbeiro,
-            "Data": data.strftime("%Y-%m-%d"),
-            "Hora": hora
-        }
-        df = pd.read_csv(arquivo_csv)
-        df = pd.concat([df, pd.DataFrame([novo_agendamento])], ignore_index=True)
-        df.to_csv(arquivo_csv, index=False)
-        st.success("✅ Agendamento realizado com sucesso!")
+    if not horarios_disponiveis:
+        st.warning("❌ Barbearia fechada nesse dia.")
 
-elif menu == "Admin (ver agendamentos)":
-    st.subheader("🧾 Lista de Agendamentos")
-    senha = st.text_input("Senha de admin", type="password")
-    if senha == "admin123":  # Troque para uma senha segura
-        df = pd.read_csv(arquivo_csv)
-        filtro_barbeiro = st.multiselect("Filtrar por barbeiro", barbeiros, default=barbeiros)
-        df_filtrado = df[df["Barbeiro"].isin(filtro_barbeiro)]
+    if st.button("✅ Confirmar Agendamento"):
+        if nome and telefone and hora:
+            df = carregar_dados()
+            novo = pd.DataFrame([{
+                "Nome": nome.strip(),
+                "Telefone": telefone.strip(),
+                "Barbeiro": barbeiro,
+                "Data": data.strftime("%Y-%m-%d"),
+                "Hora": hora
+            }])
+            df = pd.concat([df, novo], ignore_index=True)
+            salvar_dados(df)
+            st.success("🎉 Agendamento realizado com sucesso!")
+        else:
+            st.error("Preencha todos os campos para confirmar o agendamento.")
 
-        st.dataframe(df_filtrado.sort_values(by=["Data", "Hora"]))
-        st.download_button("📥 Baixar CSV", df_filtrado.to_csv(index=False), "agendamentos.csv", "text/csv")
-    elif senha != "":
+elif menu == "🔐 Admin":
+    st.header("🔒 Painel Administrativo")
+    senha = st.text_input("Senha de administrador", type="password")
+
+    if senha == "admin123":
+        df = carregar_dados()
+        if df.empty:
+            st.info("Nenhum agendamento registrado.")
+        else:
+            st.markdown("### 📑 Lista de Agendamentos")
+            df_sorted = df.sort_values(by=["Data", "Hora"])
+            filtro_barbeiro = st.multiselect("Filtrar por barbeiro", options=BARBEIROS, default=BARBEIROS)
+            df_filtrado = df_sorted[df_sorted["Barbeiro"].isin(filtro_barbeiro)]
+            st.dataframe(df_filtrado, use_container_width=True)
+
+            st.download_button(
+                label="📥 Baixar lista (CSV)",
+                data=df_filtrado.to_csv(index=False),
+                file_name="agendamentos_filtrados.csv",
+                mime="text/csv"
+            )
+    elif senha:
         st.error("Senha incorreta.")
