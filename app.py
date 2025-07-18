@@ -15,9 +15,10 @@ dias_funcionamento = {
 arquivo_csv = "agendamentos.csv"
 
 # Inicializa o arquivo se não existir
+
 try:
     df = pd.read_csv(arquivo_csv)
-except FileNotFoundError:
+except (FileNotFoundError, pd.errors.EmptyDataError):
     df = pd.DataFrame(columns=["Nome", "Telefone", "Barbeiro", "Data", "Hora"])
     df.to_csv(arquivo_csv, index=False)
 
